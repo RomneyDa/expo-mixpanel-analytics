@@ -1,56 +1,60 @@
-import { Platform, Dimensions, AsyncStorage } from "react-native";
+import { Platform, Dimensions } from "react-native";
+
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import Constants from "expo-constants";
+import * as Device from "expo-device";
+
 import { Buffer } from "buffer";
 
-const { width, height } = Dimensions.get("window");
-
 const MIXPANEL_API_URL = "https://api.mixpanel.com";
-const ASYNC_STORAGE_KEY = "mixpanel:super:props";
-const isIosPlatform = Platform.OS === "ios";
 
 export class ExpoMixpanelAnalytics {
   ready = false;
   token: string;
+  storageKey: string;
   userId?: string | null;
   clientId?: string;
-  userAgent?: string | null;
-  appName?: string;
-  appId?: string;
-  appVersion?: string;
-  screenSize?: string;
-  deviceName?: string;
   platform?: string;
   model?: string;
-  osVersion: string | number;
-  queue: any[];
+  queue: any[] = [];
+  constants: { [key: string]: string | number | void } = {};
   superProps: any = {};
   apiURL: string = MIXPANEL_API_URL;
+  brand?:string
 
-  constructor(token) {
-    this.ready = false;
-    this.queue = [];
+  constructor(token, storageKey = "mixpanel:super:props") {
+    this.storageKey = storageKey;
 
     this.token = token;
     this.userId = null;
-    this.clientId = Constants.deviceId;
-    this.osVersion = Platform.Version;
-    this.superProps;
+    this.clientId = Constants.deviceId
+    this.constants = {
+      app_build_number: Constants.manifest?.revisionId,
+      app_id: Constants.manifest?.slug,
+      app_name: Constants.manifest?.name,
+      app_version_string: Constants.manifest?.version,
+      device_name: Constants.deviceName,
+      expo_app_ownership: Constants.appOwnership || undefined,
+      os_version: Platform.Version,
+    };
 
-    Constants.getWebViewUserAgentAsync().then(userAgent => {
-      this.userAgent = userAgent;
-      this.appName = Constants.manifest.name;
-      this.appId = Constants.manifest.slug;
-      this.appVersion = Constants.manifest.version;
-      this.screenSize = `${width}x${height}`;
-      this.deviceName = Constants.deviceName;
-      if (isIosPlatform && Constants.platform && Constants.platform.ios) {
-        this.platform = Constants.platform.ios.platform;
-        this.model = Constants.platform.ios.model;
-      } else {
-        this.platform = "android";
-      }
+    Constants.getWebViewUserAgentAsync().then((userAgent) => {
+      // @ts-ignore
+      const { width, height } = Dimensions.get("window");
+      Object.assign(this.constants, {
+        screen_height: height,
+        screen_size: `${width}x${height}`,
+        screen_width: width,
+        user_agent: userAgent,
+      });
 
-      AsyncStorage.getItem(ASYNC_STORAGE_KEY, (_, result) => {
+      this.brand = Device.brand|| undefined;
+      this.platform = Platform.OS;
+      this.model = Device.modelName || undefined;
+
+
+      AsyncStorage.getItem(this.storageKey, (_, result) => {
         if (result) {
           try {
             this.superProps = JSON.parse(result) || {};
@@ -58,7 +62,6 @@ export class ExpoMixpanelAnalytics {
         }
 
         this.ready = true;
-        this.identify(this.clientId);
         this._flush();
       });
     });
@@ -67,14 +70,14 @@ export class ExpoMixpanelAnalytics {
   register(props: any) {
     this.superProps = props;
     try {
-      AsyncStorage.setItem(ASYNC_STORAGE_KEY, JSON.stringify(props));
+      AsyncStorage.setItem(this.storageKey, JSON.stringify(props));
     } catch {}
   }
 
   track(name: string, props?: any) {
     this.queue.push({
       name,
-      props
+      props,
     });
     this._flush();
   }
@@ -86,7 +89,7 @@ export class ExpoMixpanelAnalytics {
   reset() {
     this.identify(this.clientId);
     try {
-      AsyncStorage.setItem(ASYNC_STORAGE_KEY, JSON.stringify({}));
+      AsyncStorage.setItem(this.storageKey, JSON.stringify({}));
     } catch {}
   }
 
@@ -137,7 +140,7 @@ export class ExpoMixpanelAnalytics {
     if (this.userId) {
       const data = {
         $token: this.token,
-        $distinct_id: this.userId
+        $distinct_id: this.userId,
       };
       data[`$${operation}`] = props;
 
@@ -149,29 +152,21 @@ export class ExpoMixpanelAnalytics {
     let data = {
       event: event.name,
       properties: {
+        ...this.constants,
         ...(event.props || {}),
-        ...this.superProps
-      }
+        ...this.superProps,
+      },
     };
     if (this.userId) {
       data.properties.distinct_id = this.userId;
     }
     data.properties.token = this.token;
-    data.properties.user_agent = this.userAgent;
-    data.properties.app_name = this.appName;
-    data.properties.app_id = this.appId;
-    data.properties.app_version = this.appVersion;
-    data.properties.screen_size = this.screenSize;
     data.properties.client_id = this.clientId;
-    data.properties.device_name = this.deviceName;
     if (this.platform) {
       data.properties.platform = this.platform;
     }
     if (this.model) {
       data.properties.model = this.model;
-    }
-    if (this.osVersion) {
-      data.properties.os_version = this.osVersion;
     }
 
     const buffer = new Buffer(JSON.stringify(data)).toString("base64");
