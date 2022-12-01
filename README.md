@@ -20,6 +20,8 @@ import ExpoMixpanelAnalytics from '@benawad/expo-mixpanel-analytics';
 ```
 const analytics = new ExpoMixpanelAnalytics("5224da5bbbed3fdeaad0911820f1bf2x");
 
+analytics.set_proxy_url("https://your_proxy.com/api/mixpanel/proxy_example")
+
 analytics.identify("13793");
 
 analytics.register({ email: "bob@bob.com" }); // super props sent on every request and persisted in AsyncStorage
