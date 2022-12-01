@@ -24,6 +24,7 @@ export class ExpoMixpanelAnalytics {
   osVersion: string | number;
   queue: any[];
   superProps: any = {};
+  apiURL: string = MIXPANEL_API_URL;
 
   constructor(token) {
     this.ready = false;
@@ -117,6 +118,10 @@ export class ExpoMixpanelAnalytics {
     this._people("delete", "");
   }
 
+  set_proxy_url(url: string) {
+    this.apiURL = url;
+  }
+
   // ===========================================================================================
 
   _flush() {
@@ -171,12 +176,12 @@ export class ExpoMixpanelAnalytics {
 
     const buffer = new Buffer(JSON.stringify(data)).toString("base64");
 
-    return fetch(`${MIXPANEL_API_URL}/track/?data=${buffer}`);
+    return fetch(`${this.apiURL}/track/?data=${buffer}`);
   }
 
   _pushProfile(data) {
     data = new Buffer(JSON.stringify(data)).toString("base64");
-    return fetch(`${MIXPANEL_API_URL}/engage/?data=${data}`);
+    return fetch(`${this.apiURL}/engage/?data=${data}`);
   }
 }
 
